@@ -128,7 +128,7 @@
     </div>
   </header>
 
-  <div class="stage"><div class="floorplan" id="floorplan"><div class="plan-title">Level 4 Temperature Readings</div></div></div>
+  <div class="stage"><div class="floorplan" id="floorplan"><div class="plan-title">Level 4 Temperature Reading</div></div></div>
 
   <aside>
     <div>
@@ -336,7 +336,10 @@ async function fetchLive(){
     if(selIdx!=null) select(selIdx); // refresh open panel
   }catch(err){
     console.warn("Live fetch failed:",err);
-    Object.keys(cfg).forEach(id=>{ if(!liveConfigured(id)) return; const e=nodeById[id]; if(e){e.n._el.classList.add("stale"); setRowLive(e.n,false);}});
+    Object.keys(cfg).forEach(id=>{ if(!liveConfigured(id)) return; const e=nodeById[id];
+      if(e){ e.n.state="warn"; e.n.stats={ Status:"Connection error", "Last upload":"—" };
+             e.n._el.classList.add("stale"); setRowLive(e.n,false); applyState(e.n); }});
+    if(selIdx!=null) select(selIdx);
   }
 }
 
