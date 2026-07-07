@@ -146,6 +146,45 @@
    top/left are % of the floor-plan box. Rename / edit stats freely.
    When we wire the LI-COR API, give each node a sensorId + live stats.
    ===================================================================== */
+/* =====================================================================
+   LIVE DATA  —  add a logger serial (sn) next to any room to bring that
+   node live. Rooms with an empty sn stay static placeholders.
+   HOW TO CONNECT A SENSOR:
+     1. Find the room below (each line is commented with its name).
+     2. Paste its LI-COR logger serial between the quotes:  sn: "12345678"
+     3. Save and re-upload this file. That node goes live automatically —
+        it becomes a LIVE node, no other edits needed.
+   measurement = the sensor label in LI-COR (usually "Temperature").
+   warnF / alarmF = amber / red thresholds in degrees F.
+   ===================================================================== */
+const CONFIG = {
+  PROXY_URL: "https://licor-proxy.devinmorell.workers.dev/",
+  REFRESH_MS: 120000,      // poll every 2 min
+  LOOKBACK_MIN: 120,       // pull last 2 hours, show newest
+  LIVE: {
+    // ---- Electrical rooms ----
+    "4033": { sn: "",         measurement: "Temperature", warnF: 80, alarmF: 90 }, // Elec Room S
+    "4032": { sn: "",         measurement: "Temperature", warnF: 80, alarmF: 90 }, // Elec Room T
+    "4031": { sn: "",         measurement: "Temperature", warnF: 80, alarmF: 90 }, // Elec Room U
+    "4029": { sn: "",         measurement: "Temperature", warnF: 80, alarmF: 90 }, // Elec Room V
+    "4028": { sn: "",         measurement: "Temperature", warnF: 80, alarmF: 90 }, // Elec Room W
+    "4027": { sn: "22443487", measurement: "Temperature", warnF: 80, alarmF: 90 }, // Elec Room X
+    "4026": { sn: "22443486", measurement: "Temperature", warnF: 80, alarmF: 90 }, // Elec Room R1
+    // ---- Ehouses ----
+    "EH-1": { sn: "",         measurement: "Temperature", warnF: 80, alarmF: 90 }, // Ehouse 1
+    "EH-2": { sn: "",         measurement: "Temperature", warnF: 80, alarmF: 90 }, // Ehouse 2
+    "EH-3": { sn: "22443485", measurement: "Temperature", warnF: 80, alarmF: 90 }, // Ehouse 3
+    // ---- Data halls ----
+    "4030": { sn: "",         measurement: "Temperature", warnF: 80, alarmF: 90 }, // Data Hall 4-F
+    "4020": { sn: "",         measurement: "Temperature", warnF: 80, alarmF: 90 }, // Data Hall 4-C
+  },
+};
+
+function liveConfigured(id){
+  const c = CONFIG.LIVE[id];
+  return !!(c && c.sn && !c.sn.startsWith("YOUR_"));
+}
+
 const nodes = [
   { id:"4033", name:"Elec Room S", loc:"Electrical Room S", top:17.5, left:73.8, state:"ok", stats:{ Status:"Online", Temp:"72.7 \u00b0F", Humidity:"41 %RH", "Last upload":"just now" } },
   { id:"4032", name:"Elec Room T", loc:"Electrical Room T", top:26.8, left:73.9, state:"ok", stats:{ Status:"Online", Temp:"72.7 \u00b0F", Humidity:"41 %RH", "Last upload":"just now" } },
@@ -169,7 +208,7 @@ document.getElementById("count").textContent=nodes.length;
 
 nodes.forEach((n,i)=>{
   const el=document.createElement("div");
-  el.className="node state-"+n.state+(n.live?" livefeed":"");
+  el.className="node state-"+n.state+(liveConfigured(n.id)?" livefeed":"");
   el.style.top=n.top+"%"; el.style.left=n.left+"%";
   el.innerHTML='<div class="ring"></div><div class="badge"></div><span class="tip">'+n.name+' &middot; '+n.loc+'</span>';
   el.addEventListener("click",e=>{e.stopPropagation();select(i);});
@@ -178,7 +217,7 @@ nodes.forEach((n,i)=>{
   const r=document.createElement("div");
   r.className="rrow";
   r.innerHTML='<span class="sw" style="color:'+stateColor[n.state]+'"></span>'+n.name
-    +(n.live?'<span class="lv">LIVE</span>':'<span class="id">'+n.id+'</span>');
+    +(liveConfigured(n.id)?'<span class="lv">LIVE</span>':'<span class="id">'+n.id+'</span>');
   r.addEventListener("click",()=>select(i));
   roster.appendChild(r); n._row=r;
 });
@@ -201,27 +240,6 @@ function select(i){
     +'<div class="dt-loc">'+n.id+' &middot; '+n.loc+'</div>'+rows;
 }
 
-/* =====================================================================
-   LIVE DATA  —  pulls the 3 connected sensors through your proxy.
-   1. Deploy the Cloudflare Worker (licor-proxy-worker.js) and paste its
-      URL into PROXY_URL below.
-   2. Fill in each live node's logger serial number (sn) and the
-      measurement label to display. Get serials from LI-COR Cloud
-      (Devices) — the "loggers" the /v1/data endpoint expects.
-   3. Adjust warn/alarm thresholds (deg C) to taste.
-   The other 9 nodes stay static until you connect more sensors.
-   ===================================================================== */
-const CONFIG = {
-  PROXY_URL: "https://licor-proxy.devinmorell.workers.dev/",   // <-- your deployed worker URL
-  REFRESH_MS: 120000,                              // poll every 2 min
-  LOOKBACK_MIN: 120,                               // pull the last 2 hours, use newest
-  LIVE: {
-    // nodeId : { sn: "22459340", measurement: "sensor label", warnF: 80, alarmF: 90 }
-    "4026": { sn: "22443486",  measurement: "Temperature", warnF: 80, alarmF: 90 }, // Eroom R1
-    "4027": { sn: "22443487",   measurement: "Temperature", warnF: 80, alarmF: 90 }, // Eroom X
-    "EH-3": { sn: "22443485", measurement: "Temperature", warnF: 80, alarmF: 90 }, // Ehouse 3
-  },
-};
 
 const nodeById = Object.fromEntries(nodes.map((n,i)=>[n.id,{n,i}]));
 
@@ -271,6 +289,7 @@ async function fetchLive(){
     const rows=payload.data||payload.observation_list||[];
     if(!loggedShape){ console.log("LI-COR sample reading:",rows[0]); loggedShape=true; }
     Object.entries(cfg).forEach(([id,c])=>{
+      if(!liveConfigured(id)) return;
       const entry=nodeById[id]; if(!entry) return;
       const latest=pickLatest(rows,c.sn,c.measurement);
       const n=entry.n;
@@ -293,7 +312,7 @@ async function fetchLive(){
     if(selIdx!=null) select(selIdx); // refresh open panel
   }catch(err){
     console.warn("Live fetch failed:",err);
-    Object.keys(cfg).forEach(id=>{const e=nodeById[id]; if(e){e.n._el.classList.add("stale"); setRowLive(e.n,false);}});
+    Object.keys(cfg).forEach(id=>{ if(!liveConfigured(id)) return; const e=nodeById[id]; if(e){e.n._el.classList.add("stale"); setRowLive(e.n,false);}});
   }
 }
 
