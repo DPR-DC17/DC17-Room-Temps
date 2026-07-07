@@ -45,6 +45,12 @@
     box-shadow:0 24px 70px rgba(0,0,0,.6);cursor:crosshair}
 
   /* interactive ring framing each baked-in red dot (transparent center) */
+  .plan-title{position:absolute;top:0;left:50%;transform:translateX(-50%);
+    z-index:4;pointer-events:none;margin-top:10px;
+    font-family:var(--sans);font-size:17px;font-weight:600;letter-spacing:.4px;
+    color:var(--ink);background:rgba(11,14,19,.82);border:1px solid var(--line);
+    border-radius:8px;padding:8px 18px;box-shadow:0 6px 20px rgba(0,0,0,.45);
+    -webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);white-space:nowrap}
   .node{position:absolute;transform:translate(-50%,-50%);width:34px;height:34px;
     border-radius:50%;cursor:pointer;z-index:3}
   .node .ring{width:100%;height:100%;border-radius:50%;border:2.5px solid var(--accent);
@@ -54,9 +60,11 @@
   @keyframes ping{0%{transform:scale(.75);opacity:.5}100%{transform:scale(1.7);opacity:0}}
   .node:hover .ring{transform:scale(1.22)}
   .node.sel .ring{border-color:#fff;box-shadow:0 0 16px rgba(255,255,255,.75)}
-  .node.state-ok .ring{border-color:var(--ok)} .node.state-ok::after{border-color:var(--ok)}
-  .node.state-warn .ring{border-color:var(--warn)} .node.state-warn::after{border-color:var(--warn)}
-  .node.state-alarm .ring{border-color:var(--alarm)} .node.state-alarm::after{border-color:var(--alarm)}
+  /* ring color by configuration/alarm: yellow = not configured, green = configured, red = alarm */
+  .node .ring{border-color:var(--warn)} .node::after{border-color:var(--warn)}
+  .node.livefeed .ring{border-color:var(--ok)} .node.livefeed::after{border-color:var(--ok)}
+  .node.livefeed.alarm .ring{border-color:var(--alarm)} .node.livefeed.alarm::after{border-color:var(--alarm)}
+  .node.sel .ring{border-color:#fff !important}
   .node .tip{position:absolute;left:42px;top:50%;transform:translateY(-50%);
     font-family:var(--mono);font-size:10px;white-space:nowrap;background:rgba(11,14,19,.95);
     padding:4px 8px;border-radius:4px;border:1px solid var(--line);opacity:0;
@@ -120,7 +128,7 @@
     </div>
   </header>
 
-  <div class="stage"><div class="floorplan" id="floorplan"></div></div>
+  <div class="stage"><div class="floorplan" id="floorplan"><div class="plan-title">Level 4 Temperature Reading</div></div></div>
 
   <aside>
     <div>
@@ -163,7 +171,7 @@ const CONFIG = {
   PROXY_URL: "https://licor-proxy.devinmorell.workers.dev/",
   STATION_SN: "22459340",  // the RX/MX station all sensors report through (the 'loggers' value)
   REFRESH_MS: 120000,      // poll every 2 min
-  LOOKBACK_MIN: 360,       // pull last 6 hours, show newest reading
+  LOOKBACK_MIN: 1440,      // pull last 24 hours, show newest reading
   LIVE: {
     // ---- Electrical rooms ----
     "4033": { sn: "",         measurement: "Temperature", warnF: 80, alarmF: 90 }, // Elec Room S
@@ -207,11 +215,17 @@ const fp=document.getElementById("floorplan");
 const detail=document.getElementById("detail");
 const roster=document.getElementById("roster");
 const stateColor={ok:"var(--ok)",warn:"var(--warn)",alarm:"var(--alarm)"};
+// ring/swatch color: yellow = not configured, green = configured, red = alarm
+function dotColor(n){
+  if(!liveConfigured(n.id)) return "var(--warn)";
+  return n.state==="alarm" ? "var(--alarm)" : "var(--ok)";
+}
 document.getElementById("count").textContent=nodes.length;
 
 nodes.forEach((n,i)=>{
   const el=document.createElement("div");
-  el.className="node state-"+n.state+(liveConfigured(n.id)?" livefeed":"");
+  const cfg=liveConfigured(n.id);
+  el.className="node"+(cfg?" livefeed":"")+(cfg&&n.state==="alarm"?" alarm":"");
   el.style.top=n.top+"%"; el.style.left=n.left+"%";
   el.innerHTML='<div class="ring"></div><div class="badge"></div><span class="tip">'+n.name+' &middot; '+n.loc+'</span>';
   el.addEventListener("click",e=>{e.stopPropagation();select(i);});
@@ -219,8 +233,8 @@ nodes.forEach((n,i)=>{
 
   const r=document.createElement("div");
   r.className="rrow";
-  r.innerHTML='<span class="sw" style="color:'+stateColor[n.state]+'"></span>'+n.name
-    +(liveConfigured(n.id)?'<span class="lv">LIVE</span>':'<span class="id">'+n.id+'</span>');
+  r.innerHTML='<span class="sw" style="color:'+dotColor(n)+'"></span>'+n.name
+    +(cfg?'<span class="lv">LIVE</span>':'<span class="id">'+n.id+'</span>');
   r.addEventListener("click",()=>select(i));
   roster.appendChild(r); n._row=r;
 });
@@ -231,7 +245,7 @@ function select(i){
   nodes.forEach(n=>{n._el.classList.remove("sel");n._row.classList.remove("sel");});
   const n=nodes[i]; n._el.classList.add("sel"); n._row.classList.add("sel");
   n._el.scrollIntoView({block:"nearest",inline:"nearest"});
-  const col=stateColor[n.state];
+  const col=dotColor(n);
   const rows=Object.entries(n.stats).map(([k,v])=>{
     let cls="";
     if(/online/i.test(v)) cls="ok";
@@ -320,8 +334,9 @@ async function fetchLive(){
 }
 
 function applyState(n){
-  n._el.className="node state-"+n.state+" livefeed"+(n._el.classList.contains("stale")?" stale":"");
-  const sw=n._row.querySelector(".sw"); if(sw) sw.style.color=stateColor[n.state]||"var(--ok)";
+  n._el.classList.add("livefeed");
+  n._el.classList.toggle("alarm", n.state==="alarm");
+  const sw=n._row.querySelector(".sw"); if(sw) sw.style.color=dotColor(n);
 }
 function setRowLive(n,ok){
   const lv=n._row.querySelector(".lv"); if(lv) lv.classList.toggle("stale",!ok);
