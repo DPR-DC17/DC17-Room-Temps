@@ -246,12 +246,18 @@ function select(i){
   const n=nodes[i]; n._el.classList.add("sel"); n._row.classList.add("sel");
   n._el.scrollIntoView({block:"nearest",inline:"nearest"});
   const col=dotColor(n);
-  const rows=Object.entries(n.stats).map(([k,v])=>{
-    let cls="";
-    if(/online/i.test(v)) cls="ok";
-    else if(k==="Temp"||k==="Reading") cls = (n.state==="alarm"?"alarm":(n.state==="warn"?"warn":""));
-    return '<div class="stat"><span class="k">'+k+'</span><span class="v '+cls+'">'+v+'</span></div>';
-  }).join("");
+  let rows;
+  if(!liveConfigured(n.id)){
+    rows='<div class="stat"><span class="k">Status</span><span class="v">No sensor assigned</span></div>'
+        +'<div class="stat"><span class="k">To connect</span><span class="v" style="font-size:11px">add a serial in CONFIG</span></div>';
+  }else{
+    rows=Object.entries(n.stats).map(([k,v])=>{
+      let cls="";
+      if(/online/i.test(v)) cls="ok";
+      else if(k==="Temp"||k==="Reading") cls = (n.state==="alarm"?"alarm":(n.state==="warn"?"warn":""));
+      return '<div class="stat"><span class="k">'+k+'</span><span class="v '+cls+'">'+v+'</span></div>';
+    }).join("");
+  }
   detail.innerHTML='<div class="dt-head"><span class="dot" style="color:'+col+';background:'+col+'"></span>'
     +'<span class="dt-name">'+n.name+'</span></div>'
     +'<div class="dt-loc">'+n.id+' &middot; '+n.loc+'</div>'+rows;
